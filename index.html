@@ -1,0 +1,1927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Air Dash Open World - Multiplayer Edition</title>
+  <!-- PeerJS WebRTC Library -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body {
+      background: #020617;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 100vw;
+      max-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      background: #030712;
+      border: 2px solid #06b6d4;
+      box-shadow: 0 0 25px rgba(6, 182, 212, 0.25);
+      border-radius: 14px;
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      touch-action: none;
+    }
+
+    /* HUD Elements */
+    .hud {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      font-weight: 900;
+      font-size: 15px;
+      color: #38bdf8;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+      z-index: 5;
+    }
+    .hud-right { display: flex; gap: 16px; }
+    .slow-mo-badge { color: #f43f5e; opacity: 0; transition: opacity 0.2s; font-style: italic; }
+    .slow-mo-badge.active { opacity: 1; }
+    .coins-box { color: #facc15; }
+    .jumps-box { color: #38bdf8; }
+
+    /* Boss Health Bar */
+    #boss-hud {
+      position: absolute;
+      top: 48px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      max-width: 400px;
+      text-align: center;
+      display: none;
+      z-index: 6;
+    }
+    #boss-name {
+      font-size: 14px;
+      font-weight: 900;
+      color: #f43f5e;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+      text-shadow: 0 0 10px rgba(244, 63, 94, 0.8);
+    }
+    .boss-bar-bg {
+      background: rgba(15, 23, 42, 0.8);
+      border: 2px solid #f43f5e;
+      border-radius: 10px;
+      height: 16px;
+      overflow: hidden;
+      box-shadow: 0 0 12px rgba(244, 63, 94, 0.4);
+    }
+    #boss-hp-fill {
+      background: linear-gradient(90deg, #f43f5e, #fb7185);
+      height: 100%;
+      width: 100%;
+      transition: width 0.15s ease-out;
+    }
+
+    /* Lobby Screen */
+    #lobby-screen {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.96);
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      border-radius: 14px;
+      z-index: 20;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    #lobby-screen h1 {
+      font-size: 26px;
+      color: #38bdf8;
+      text-shadow: 0 0 20px rgba(56, 189, 248, 0.6);
+      margin-bottom: 2px;
+      letter-spacing: 1px;
+    }
+    .subtitle { color: #94a3b8; font-size: 11px; margin-bottom: 10px; }
+
+    .btn-main {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: white;
+      border: 2px solid #38bdf8;
+      padding: 12px 42px;
+      border-radius: 10px;
+      font-weight: 900;
+      font-size: 17px;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(2, 132, 199, 0.6);
+      transition: transform 0.1s, box-shadow 0.2s;
+      margin-bottom: 12px;
+    }
+    .btn-main:hover { box-shadow: 0 0 25px rgba(56, 189, 248, 0.8); }
+    .btn-main:active { transform: scale(0.96); }
+
+    .stats-card {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid #1e293b;
+      padding: 8px 18px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      display: flex;
+      gap: 18px;
+    }
+    .stat-item { text-align: center; }
+    .stat-label { font-size: 9px; color: #64748b; font-weight: bold; }
+    .stat-val { font-size: 16px; color: #facc15; font-weight: 900; }
+
+    /* Panels */
+    .panel-box {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px 14px;
+      width: 100%;
+      max-width: 620px;
+      margin-bottom: 12px;
+    }
+    .panel-title {
+      font-size: 11px;
+      color: #38bdf8;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+      text-align: center;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Input & Multiplayer UI */
+    .input-field {
+      width: 100%;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #475569;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      outline: none;
+      text-align: center;
+    }
+    .input-field:focus { border-color: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+
+    .mp-row {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .btn-sub {
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .status-text {
+      font-size: 10px;
+      font-weight: bold;
+      color: #94a3b8;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    /* Inventory Grid */
+    .inventory-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+      max-height: 70px;
+      overflow-y: auto;
+    }
+    .inv-item {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .inv-icon-badge {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .inv-item-name { color: #e2e8f0; font-weight: 600; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .inv-item-qty { font-weight: 900; color: #facc15; }
+
+    /* Shop Grid */
+    .shop-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 8px;
+    }
+    .shop-item {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .shop-item-name { font-size: 12px; font-weight: 800; color: #f8fafc; }
+    .shop-item-desc { font-size: 10px; color: #94a3b8; margin-bottom: 6px; line-height: 1.2; }
+    .shop-cost-list { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+    .cost-badge {
+      font-size: 9px;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .cost-badge.met { border-color: #22c55e; color: #4ade80; }
+    .cost-badge.unmet { border-color: #ef4444; color: #f87171; }
+    
+    .btn-buy {
+      background: linear-gradient(135deg, #16a34a, #15803d);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 11px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn-buy:disabled {
+      background: #334155;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    /* Gacha Section */
+    .gacha-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-gacha {
+      background: linear-gradient(135deg, #d97706, #b45309);
+      border: 1px solid #facc15;
+      color: white;
+      padding: 8px 24px;
+      border-radius: 8px;
+      font-weight: 900;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(250, 204, 21, 0.3);
+      transition: transform 0.1s;
+    }
+    .btn-gacha:active { transform: scale(0.96); }
+    .btn-gacha:disabled { background: #334155; border-color: #475569; color: #64748b; cursor: not-allowed; box-shadow: none; }
+
+    #gacha-result {
+      min-height: 24px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #facc15;
+      text-align: center;
+    }
+
+    /* Cosmetics Inventory Tabs */
+    .cosmetics-tabs {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .tab-btn {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #475569;
+      color: #94a3b8;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: white;
+    }
+    .cosmetic-items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 6px;
+      max-height: 110px;
+      overflow-y: auto;
+    }
+    .cosmetic-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px;
+      text-align: center;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .cosmetic-card.equipped {
+      border-color: #22c55e;
+      background: rgba(22, 101, 52, 0.3);
+    }
+    .cosmetic-card.locked {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .cosmetic-preview {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid #ffffff;
+    }
+    .cosmetic-title { font-size: 10px; font-weight: bold; color: #f8fafc; }
+
+    /* Game Over Modal */
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      background: rgba(15, 23, 42, 0.96);
+      border: 2px solid #ef4444;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+      padding: 24px 34px;
+      border-radius: 14px;
+      display: none;
+      z-index: 30;
+    }
+    #game-over h2 { color: #ef4444; margin-bottom: 8px; font-size: 24px; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <!-- HUD -->
+  <div class="hud">
+    <div>SCORE: <span id="score">0</span></div>
+    <div class="hud-right">
+      <div id="slow-badge" class="slow-mo-badge">BULLET-TIME</div>
+      <div class="coins-box">COINS: <span id="hud-coins">0</span></div>
+      <div class="jumps-box">DASH: <span id="jumps">2</span>/<span id="max-jumps-hud">2</span></div>
+    </div>
+  </div>
+
+  <!-- Boss Health Bar -->
+  <div id="boss-hud">
+    <div id="boss-name">BOSS NAME</div>
+    <div class="boss-bar-bg"><div id="boss-hp-fill"></div></div>
+  </div>
+
+  <!-- Lobby Overlay -->
+  <div id="lobby-screen">
+    <h1>AIR DASH WORLDS</h1>
+    <div class="subtitle">Defeat enemies, collect drops, unlock cosmetics & upgrade your player!</div>
+
+    <!-- PLAY BUTTON ON TOP -->
+    <button class="btn-main" onclick="startGame()">PLAY GAME</button>
+
+    <div class="stats-card">
+      <div class="stat-item"><div class="stat-label">TOTAL COINS</div><div id="lobby-coins" class="stat-val">0</div></div>
+      <div class="stat-item"><div class="stat-label">HIGH SCORE</div><div id="lobby-high" class="stat-val" style="color:#38bdf8;">0</div></div>
+      <div class="stat-item"><div class="stat-label">BOSSES DEFEATED</div><div id="lobby-bosses" class="stat-val" style="color:#f43f5e;">0/4</div></div>
+    </div>
+
+    <!-- Multiplayer & Profile Panel -->
+    <div class="panel-box">
+      <div class="panel-title">🌐 MULTIPLAYER LOBBY</div>
+      <input type="text" id="nickname-input" class="input-field" placeholder="Enter Your Nickname..." maxlength="12" onchange="saveNickname()" />
+      
+      <!-- Host with Custom Room Name Option -->
+      <div class="mp-row">
+        <input type="text" id="host-room-input" class="input-field" placeholder="Create Room Name (e.g. a)" style="margin-bottom:0;" />
+        <button class="btn-sub" onclick="hostMultiplayerRoom()">HOST GAME</button>
+      </div>
+
+      <!-- Join Room Input -->
+      <div class="mp-row">
+        <input type="text" id="join-room-input" class="input-field" placeholder="Enter Room Name To Join (e.g. a)..." style="margin-bottom:0;" />
+        <button class="btn-sub" onclick="joinMultiplayerRoom()">JOIN</button>
+        <button class="btn-sub" style="background: #059669;" onclick="copyRoomID()">COPY NAME</button>
+      </div>
+
+      <div id="mp-status" class="status-text">Status: Offline (Singleplayer)</div>
+    </div>
+
+    <!-- Cosmetic Gacha Section -->
+    <div class="panel-box">
+      <div class="panel-title">🎁 COSMETIC GACHA (500 COINS)</div>
+      <div class="gacha-container">
+        <button id="btn-roll-gacha" class="btn-gacha" onclick="rollGacha()">ROLL COSMETIC GACHA (500 Coins)</button>
+        <div id="gacha-result">Try your luck to unlock rare Player Skins & Dash Trails!</div>
+      </div>
+    </div>
+
+    <!-- Cosmetics Customization Panel -->
+    <div class="panel-box">
+      <div class="panel-title">🎨 CUSTOMIZATION LOCKER</div>
+      <div class="cosmetics-tabs">
+        <button id="tab-skins" class="tab-btn active" onclick="switchCosmeticTab('skins')">Skins</button>
+        <button id="tab-trails" class="tab-btn" onclick="switchCosmeticTab('trails')">Dash Trails</button>
+      </div>
+      <div id="cosmetics-grid" class="cosmetic-items-grid"></div>
+    </div>
+
+    <!-- Material Inventory -->
+    <div class="panel-box">
+      <div class="panel-title">📦 MATERIAL INVENTORY</div>
+      <div id="inventory-grid" class="inventory-grid"></div>
+    </div>
+
+    <!-- Upgrades Shop Section -->
+    <div class="panel-box">
+      <div class="panel-title">⚡ UPGRADE SHOP (COINS + MATERIALS)</div>
+      <div id="shop-grid" class="shop-grid"></div>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="game-over">
+    <h2 id="death-reason">KILLED BY ENEMY!</h2>
+    <p style="color: #94a3b8; margin-top: 4px;">Run Coins Earned: <span id="final-coins" style="color: #facc15; font-weight: bold;">0</span></p>
+    <button class="btn-main" style="margin-top:14px; padding: 10px 24px; font-size:14px;" onclick="returnToLobby()">Back to Lobby</button>
+  </div>
+
+  <canvas id="canvas" width="900" height="500"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Responsive Dynamic Resolution Sizing
+function resizeCanvas() {
+  const isPortrait = window.innerHeight > window.innerWidth;
+  if (isPortrait) {
+    canvas.width = 600;
+    canvas.height = 900;
+  } else {
+    canvas.width = 900;
+    canvas.height = 500;
+  }
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Game Engine Config
+const GRAVITY = 0.32;
+const FRICTION = 0.985;
+const LAVA_Y = 2200;
+const ZOOM = 0.52;
+const CHUNK_SIZE = 900;
+const MIN_DASH_SPEED = 9.5;
+const MAX_DRAG_DIST = 140;
+
+// Room Prefix to avoid global peer server namespace collisions with short names like 'a'
+const ROOM_PREFIX = "airdash_room_v1_";
+
+// Material Visual Definitions
+const MATERIAL_TYPES = {
+  "Iron Scrap": { color: "#94a3b8", shape: "cog" },
+  "Chaser Plasma": { color: "#f43f5e", shape: "flame" },
+  "Shooter Lens": { color: "#facc15", shape: "gem" },
+  "Blaster Heart": { color: "#f43f5e", shape: "star" },
+  "Summoner Soul": { color: "#a855f7", shape: "star" },
+  "Sentinel Core": { color: "#06b6d4", shape: "star" },
+  "Vortex Eye": { color: "#facc15", shape: "star" }
+};
+
+// Gacha Cosmetics Catalog
+const SKINS_CATALOG = {
+  "cyan": { name: "Default Cyan", color: "#0284c7", stroke: "#38bdf8" },
+  "crimson": { name: "Crimson Flame", color: "#991b1b", stroke: "#ef4444" },
+  "gold": { name: "Golden Legend", color: "#ca8a04", stroke: "#facc15" },
+  "void": { name: "Void Purple", color: "#581c87", stroke: "#a855f7" },
+  "emerald": { name: "Cyber Emerald", color: "#065f46", stroke: "#34d399" },
+  "pink": { name: "Neon Pink", color: "#be185d", stroke: "#f472b6" }
+};
+
+const TRAILS_CATALOG = {
+  "standard": { name: "Standard Spark", color: "#38bdf8" },
+  "fire": { name: "Firestorm", color: "#f97316" },
+  "rainbow": { name: "Rainbow Aurora", color: "rainbow" },
+  "stars": { name: "Void Stars", color: "#a855f7" },
+  "plasma": { name: "Plasma Gold", color: "#facc15" },
+  "cyber": { name: "Cyber Matrix", color: "#34d399" }
+};
+
+// Persistent User Data
+let totalCoins = parseInt(localStorage.getItem('ad_coins') || '0');
+let highScore = parseInt(localStorage.getItem('ad_high') || '0');
+let materials = JSON.parse(localStorage.getItem('ad_materials') || '{}');
+let upgrades = JSON.parse(localStorage.getItem('ad_upgrades') || '{}');
+let unlockedSkins = JSON.parse(localStorage.getItem('ad_unlocked_skins') || '["cyan"]');
+let unlockedTrails = JSON.parse(localStorage.getItem('ad_unlocked_trails') || '["standard"]');
+let activeSkin = localStorage.getItem('ad_active_skin') || 'cyan';
+let activeTrail = localStorage.getItem('ad_active_trail') || 'standard';
+let playerNickname = localStorage.getItem('ad_nickname') || `Player_${Math.floor(Math.random() * 8999 + 1000)}`;
+
+document.getElementById('nickname-input').value = playerNickname;
+
+function saveStorage() {
+  localStorage.setItem('ad_coins', totalCoins.toString());
+  localStorage.setItem('ad_materials', JSON.stringify(materials));
+  localStorage.setItem('ad_upgrades', JSON.stringify(upgrades));
+  localStorage.setItem('ad_unlocked_skins', JSON.stringify(unlockedSkins));
+  localStorage.setItem('ad_unlocked_trails', JSON.stringify(unlockedTrails));
+  localStorage.setItem('ad_active_skin', activeSkin);
+  localStorage.setItem('ad_active_trail', activeTrail);
+  localStorage.setItem('ad_nickname', playerNickname);
+}
+
+function saveNickname() {
+  const val = document.getElementById('nickname-input').value.trim();
+  if (val.length > 0) {
+    playerNickname = val;
+    saveStorage();
+  }
+}
+
+// Shop Catalog Definitions
+const SHOP_ITEMS = [
+  {
+    id: 'holdExtender',
+    name: 'Hold Time Extender',
+    desc: 'Increases bullet-time aim hold duration from 3.0s to 5.0s.',
+    coins: 250,
+    costs: { "Iron Scrap": 8 }
+  },
+  {
+    id: 'dashBooster',
+    name: 'Dash Speed Booster',
+    desc: 'Increases dash power and momentum distance by +35%.',
+    coins: 500,
+    costs: { "Iron Scrap": 10, "Chaser Plasma": 6 }
+  },
+  {
+    id: 'extraDash',
+    name: 'Triple Dash Jump',
+    desc: 'Increases max dashes per air combo from 2 to 3!',
+    coins: 1500,
+    costs: { "Summoner Soul": 2, "Vortex Eye": 2 }
+  },
+  {
+    id: 'autoShooter',
+    name: 'Auto-Plasma Turret',
+    desc: 'Fires energy bolts towards nearest enemies every 3 seconds.',
+    coins: 800,
+    costs: { "Shooter Lens": 6, "Chaser Plasma": 6 }
+  },
+  {
+    id: 'reviveTotem',
+    name: 'Reviving Totem',
+    desc: 'Grants 1 auto-revive per run with a destructive shockwave.',
+    coins: 1200,
+    costs: { "Blaster Heart": 2, "Sentinel Core": 2 }
+  }
+];
+
+// State Variables
+let gameState = 'LOBBY';
+let activeCosmeticTab = 'skins';
+let score = 0;
+let runCoins = 0;
+let jumpsLeft = 2;
+let maxJumps = 2;
+let maxHoldTime = 3.0;
+let isDragging = false;
+let dragStartTime = 0;
+let holdProgress = 0;
+let timeScale = 1.0;
+let screenShake = 0;
+let autoShootTimer = 0;
+let totemRevivesLeft = 0;
+
+let dragStart = { x: 0, y: 0 };
+let dragCurrent = { x: 0, y: 0 };
+
+const player = {
+  x: 0, y: -60, vx: 0, vy: 0, radius: 18, invulnerable: 0,
+  dashImmunityTimer: 0,
+  dashDirX: 0,
+  dashDirY: -1
+};
+
+const startPlatform = { x: -160, y: 0, w: 320, h: 24 };
+
+let enemies = [];
+let enemyProjectiles = [];
+let playerProjectiles = [];
+let particles = [];
+let coinsWorld = [];
+let materialsWorld = [];
+let floatingTexts = [];
+let playerTrail = [];
+let stars = [];
+let loadedChunks = new Set();
+let activeBoss = null;
+
+// PeerJS Networking
+let peer = null;
+let connection = null;
+let remotePlayers = {};
+let currentRoomName = null;
+
+function updateMPStatus(msg) {
+  document.getElementById('mp-status').innerText = `Status: ${msg}`;
+}
+
+// Fixed Room ID Host implementation with application namespacing
+function hostMultiplayerRoom() {
+  saveNickname();
+  
+  if (peer) peer.destroy();
+
+  const customRoomInput = document.getElementById('host-room-input').value.trim();
+  const roomName = customRoomInput || Math.random().toString(36).substring(2, 7);
+  const formattedId = ROOM_PREFIX + roomName.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+  updateMPStatus(`Creating Room "${roomName}"...`);
+
+  peer = new Peer(formattedId);
+
+  peer.on('open', () => {
+    currentRoomName = roomName;
+    document.getElementById('host-room-input').value = roomName;
+    document.getElementById('join-room-input').value = roomName;
+    updateMPStatus(`Hosting Room: "${roomName}" — Waiting for players...`);
+  });
+
+  peer.on('connection', (conn) => {
+    connection = conn;
+    setupPeerListeners(conn);
+    updateMPStatus(`Connected with Remote Player!`);
+  });
+
+  peer.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      updateMPStatus(`Room "${roomName}" is currently active or taken! Try joining or pick another name.`);
+    } else {
+      updateMPStatus(`Host Error: ${err.type}`);
+    }
+  });
+}
+
+function joinMultiplayerRoom() {
+  saveNickname();
+  const roomName = document.getElementById('join-room-input').value.trim();
+  if (!roomName) {
+    alert("Please enter a room name to join!");
+    return;
+  }
+
+  const targetPeerId = ROOM_PREFIX + roomName.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+  updateMPStatus(`Connecting to Room "${roomName}"...`);
+  if (peer) peer.destroy();
+  
+  peer = new Peer();
+
+  peer.on('open', () => {
+    connection = peer.connect(targetPeerId, { reliable: true });
+    setupPeerListeners(connection);
+  });
+
+  peer.on('error', (err) => {
+    updateMPStatus(`Failed to connect to "${roomName}" (${err.type})`);
+  });
+}
+
+function setupPeerListeners(conn) {
+  if (!conn) return;
+
+  if (conn.open) {
+    updateMPStatus(`Connected to Room!`);
+  }
+
+  conn.on('open', () => {
+    updateMPStatus(`Connected to Room!`);
+  });
+
+  conn.on('data', (data) => {
+    if (data.type === 'POS') {
+      remotePlayers[data.id] = data;
+    }
+  });
+
+  conn.on('close', () => {
+    updateMPStatus("Player Disconnected.");
+    remotePlayers = {};
+  });
+
+  conn.on('error', () => {
+    updateMPStatus("Connection Error.");
+  });
+}
+
+function copyRoomID() {
+  const roomName = document.getElementById('join-room-input').value.trim() || document.getElementById('host-room-input').value.trim();
+  if (roomName) {
+    navigator.clipboard.writeText(roomName);
+    alert(`Copied Room Name: "${roomName}"`);
+  }
+}
+
+function broadcastPlayerData() {
+  if (connection && connection.open && peer) {
+    const pSpeed = Math.hypot(player.vx, player.vy);
+    connection.send({
+      type: 'POS',
+      id: peer.id,
+      name: playerNickname,
+      x: player.x,
+      y: player.y,
+      vx: player.vx,
+      vy: player.vy,
+      skin: activeSkin,
+      trail: activeTrail,
+      isDashing: pSpeed >= MIN_DASH_SPEED,
+      score: score
+    });
+  }
+}
+
+// Boss Arenas
+const bossArenas = [
+  { id: 1, x: -3800, y: -800, name: "GIGA BLASTER", type: "blaster", hp: 8, maxHp: 8, defeated: false, color: '#f43f5e', ingredient: "Blaster Heart" },
+  { id: 2, x: 3800, y: -800, name: "TITAN SUMMONER", type: "summoner", hp: 10, maxHp: 10, defeated: false, color: '#a855f7', ingredient: "Summoner Soul" },
+  { id: 3, x: -4500, y: 600, name: "SHIELD SENTINEL", type: "sentinel", hp: 12, maxHp: 12, defeated: false, color: '#06b6d4', ingredient: "Sentinel Core" },
+  { id: 4, x: 4500, y: 600, name: "VORTEX CORE", type: "vortex", hp: 15, maxHp: 15, defeated: false, color: '#facc15', ingredient: "Vortex Eye" }
+];
+
+// Stars
+for (let i = 0; i < 350; i++) {
+  stars.push({
+    x: (Math.random() - 0.5) * 14000,
+    y: -5000 + Math.random() * 9000,
+    size: Math.random() * 2.5 + 0.8,
+    alpha: Math.random() * 0.7 + 0.3
+  });
+}
+
+function addMaterial(name) {
+  materials[name] = (materials[name] || 0) + 1;
+  saveStorage();
+}
+
+function buyUpgrade(itemId) {
+  const item = SHOP_ITEMS.find(s => s.id === itemId);
+  if (!item || upgrades[itemId]) return;
+
+  if (totalCoins < item.coins) return;
+  for (let [matName, reqQty] of Object.entries(item.costs)) {
+    if ((materials[matName] || 0) < reqQty) return;
+  }
+
+  totalCoins -= item.coins;
+  for (let [matName, reqQty] of Object.entries(item.costs)) {
+    materials[matName] -= reqQty;
+  }
+
+  upgrades[itemId] = true;
+  saveStorage();
+  updateLobbyUI();
+}
+
+function rollGacha() {
+  const GACHA_COST = 500;
+  if (totalCoins < GACHA_COST) return;
+
+  const lockedSkinsList = Object.keys(SKINS_CATALOG).filter(s => !unlockedSkins.includes(s));
+  const lockedTrailsList = Object.keys(TRAILS_CATALOG).filter(t => !unlockedTrails.includes(t));
+
+  if (lockedSkinsList.length === 0 && lockedTrailsList.length === 0) {
+    document.getElementById('gacha-result').innerText = "✨ You have already unlocked all available cosmetics!";
+    return;
+  }
+
+  totalCoins -= GACHA_COST;
+
+  const pool = [];
+  if (lockedSkinsList.length > 0) pool.push({ type: 'skin', list: lockedSkinsList });
+  if (lockedTrailsList.length > 0) pool.push({ type: 'trail', list: lockedTrailsList });
+
+  const chosenCategory = pool[Math.floor(Math.random() * pool.length)];
+  const unlockedKey = chosenCategory.list[Math.floor(Math.random() * chosenCategory.list.length)];
+
+  if (chosenCategory.type === 'skin') {
+    unlockedSkins.push(unlockedKey);
+    activeSkin = unlockedKey;
+    document.getElementById('gacha-result').innerText = `🎉 UNLOCKED SKIN: ${SKINS_CATALOG[unlockedKey].name}!`;
+  } else {
+    unlockedTrails.push(unlockedKey);
+    activeTrail = unlockedKey;
+    document.getElementById('gacha-result').innerText = `🎉 UNLOCKED TRAIL: ${TRAILS_CATALOG[unlockedKey].name}!`;
+  }
+
+  saveStorage();
+  updateLobbyUI();
+}
+
+function switchCosmeticTab(tab) {
+  activeCosmeticTab = tab;
+  document.getElementById('tab-skins').classList.toggle('active', tab === 'skins');
+  document.getElementById('tab-trails').classList.toggle('active', tab === 'trails');
+  renderCosmeticsLocker();
+}
+
+function selectCosmetic(type, key) {
+  if (type === 'skins' && unlockedSkins.includes(key)) activeSkin = key;
+  if (type === 'trails' && unlockedTrails.includes(key)) activeTrail = key;
+  saveStorage();
+  renderCosmeticsLocker();
+}
+
+function renderCosmeticsLocker() {
+  const grid = document.getElementById('cosmetics-grid');
+  grid.innerHTML = '';
+
+  const catalog = activeCosmeticTab === 'skins' ? SKINS_CATALOG : TRAILS_CATALOG;
+  const unlockedList = activeCosmeticTab === 'skins' ? unlockedSkins : unlockedTrails;
+  const currentActive = activeCosmeticTab === 'skins' ? activeSkin : activeTrail;
+
+  Object.keys(catalog).forEach(key => {
+    const item = catalog[key];
+    const isUnlocked = unlockedList.includes(key);
+    const isEquipped = currentActive === key;
+
+    const card = document.createElement('div');
+    card.className = `cosmetic-card ${isEquipped ? 'equipped' : ''} ${!isUnlocked ? 'locked' : ''}`;
+    card.onclick = () => selectCosmetic(activeCosmeticTab, key);
+
+    const prevColor = item.color === 'rainbow' ? 'linear-gradient(45deg, red, yellow, green, blue)' : item.color;
+
+    card.innerHTML = `
+      <div class="cosmetic-preview" style="background: ${prevColor}; border-color: ${item.stroke || '#fff'};"></div>
+      <div class="cosmetic-title">${item.name}</div>
+      <div style="font-size: 8px; color: ${isEquipped ? '#4ade80' : (isUnlocked ? '#94a3b8' : '#ef4444')};">
+        ${isEquipped ? 'EQUIPPED' : (isUnlocked ? 'EQUIP' : 'LOCKED')}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function updateLobbyUI() {
+  document.getElementById('lobby-coins').innerText = totalCoins;
+  document.getElementById('lobby-high').innerText = highScore;
+  const slain = bossArenas.filter(b => b.defeated).length;
+  document.getElementById('lobby-bosses').innerText = `${slain}/4`;
+
+  const btnGacha = document.getElementById('btn-roll-gacha');
+  btnGacha.disabled = totalCoins < 500;
+
+  const invGrid = document.getElementById('inventory-grid');
+  invGrid.innerHTML = '';
+  const itemKeys = Object.keys(materials);
+
+  if (itemKeys.length === 0) {
+    invGrid.innerHTML = `<div style="grid-column: 1/-1; color: #64748b; font-size: 10px; text-align: center;">No materials gathered yet. Defeat enemies & bosses!</div>`;
+  } else {
+    itemKeys.forEach(key => {
+      if (materials[key] > 0) {
+        const meta = MATERIAL_TYPES[key] || { color: '#ffffff' };
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'inv-item';
+        itemDiv.innerHTML = `
+          <span class="inv-icon-badge" style="background:${meta.color}; color:${meta.color}"></span>
+          <span class="inv-item-name">${key}</span>
+          <span class="inv-item-qty">x${materials[key]}</span>
+        `;
+        invGrid.appendChild(itemDiv);
+      }
+    });
+  }
+
+  const shopGrid = document.getElementById('shop-grid');
+  shopGrid.innerHTML = '';
+
+  SHOP_ITEMS.forEach(item => {
+    const isPurchased = upgrades[item.id];
+    let canAfford = !isPurchased && totalCoins >= item.coins;
+
+    let costHTML = `<span class="cost-badge ${totalCoins >= item.coins ? 'met' : 'unmet'}">🪙 Coins: ${totalCoins}/${item.coins}</span>`;
+    
+    for (let [matName, reqQty] of Object.entries(item.costs)) {
+      const owned = materials[matName] || 0;
+      const met = owned >= reqQty;
+      if (!met) canAfford = false;
+      const meta = MATERIAL_TYPES[matName] || { color: '#fff' };
+      costHTML += `<span class="cost-badge ${met ? 'met' : 'unmet'}"><span class="inv-icon-badge" style="background:${meta.color}; width:8px; height:8px;"></span>${matName}: ${owned}/${reqQty}</span>`;
+    }
+
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'shop-item';
+    itemDiv.innerHTML = `
+      <div>
+        <div class="shop-item-name">${item.name}</div>
+        <div class="shop-item-desc">${item.desc}</div>
+        <div class="shop-cost-list">${costHTML}</div>
+      </div>
+      <button class="btn-buy" ${(!canAfford || isPurchased) ? 'disabled' : ''} onclick="buyUpgrade('${item.id}')">
+        ${isPurchased ? 'PURCHASED ✓' : 'BUY UPGRADE'}
+      </button>
+    `;
+    shopGrid.appendChild(itemDiv);
+  });
+
+  renderCosmeticsLocker();
+}
+
+function startGame() {
+  saveNickname();
+  gameState = 'PLAYING';
+  document.getElementById('lobby-screen').style.display = 'none';
+  resetGame();
+}
+
+function returnToLobby() {
+  gameState = 'LOBBY';
+  document.getElementById('game-over').style.display = 'none';
+  document.getElementById('boss-hud').style.display = 'none';
+  document.getElementById('lobby-screen').style.display = 'flex';
+  updateLobbyUI();
+}
+
+function spawnEnemiesInChunk(cx, cy) {
+  const startX = cx * CHUNK_SIZE;
+  const startY = cy * CHUNK_SIZE;
+
+  if (startY + CHUNK_SIZE >= LAVA_Y - 200) return;
+  if (Math.abs(cx) <= 0 && Math.abs(cy) <= 0) return;
+
+  for (let b of bossArenas) {
+    if (Math.hypot(startX - b.x, startY - b.y) < 1200) return;
+  }
+
+  if (Math.random() > 0.85) return;
+
+  const count = Math.floor(Math.random() * 3) + 2;
+  for (let i = 0; i < count; i++) {
+    const rand = Math.random();
+    let type = 'normal';
+    if (rand < 0.35) type = 'chaser';
+    else if (rand < 0.60) type = 'shooter';
+
+    enemies.push({
+      x: startX + Math.random() * (CHUNK_SIZE - 100) + 50,
+      y: startY + Math.random() * (CHUNK_SIZE - 100) + 50,
+      vx: 0, vy: 0,
+      radius: type === 'chaser' ? 20 : 22,
+      type: type,
+      shootCooldown: Math.random() * 120,
+      pulse: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+function updateChunkSpawning() {
+  const pChunkX = Math.floor(player.x / CHUNK_SIZE);
+  const pChunkY = Math.floor(player.y / CHUNK_SIZE);
+
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      const cx = pChunkX + dx;
+      const cy = pChunkY + dy;
+      const chunkKey = `${cx},${cy}`;
+
+      if (!loadedChunks.has(chunkKey)) {
+        loadedChunks.add(chunkKey);
+        spawnEnemiesInChunk(cx, cy);
+      }
+    }
+  }
+
+  enemies = enemies.filter(enemy => Math.hypot(enemy.x - player.x, enemy.y - player.y) < 3400);
+}
+
+function spawnExplosion(x, y, color = null) {
+  const colors = color ? [color, '#ffffff'] : ['#ef4444', '#f97316', '#facc15', '#ec4899', '#38bdf8'];
+  for (let i = 0; i < 35; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 16,
+      vy: (Math.random() - 0.5) * 16,
+      size: Math.random() * 6 + 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 1.0
+    });
+  }
+}
+
+function spawnCoins(x, y, count) {
+  for (let i = 0; i < count; i++) {
+    coinsWorld.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 10,
+      vy: (Math.random() - 0.5) * 10 - 2
+    });
+  }
+}
+
+function spawnMaterial(x, y, name) {
+  const meta = MATERIAL_TYPES[name] || { color: '#ffffff', shape: 'gem' };
+  materialsWorld.push({
+    x, y,
+    vx: (Math.random() - 0.5) * 6,
+    vy: (Math.random() - 0.5) * 6 - 2,
+    name: name,
+    color: meta.color,
+    shape: meta.shape
+  });
+}
+
+function triggerShake(intensity) {
+  screenShake = Math.max(screenShake, intensity);
+}
+
+function getPointerPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const touch = e.touches ? e.touches[0] : e;
+  return {
+    x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+    y: (touch.clientY - rect.top) * (canvas.height / rect.height)
+  };
+}
+
+function startDrag(e) {
+  if (gameState !== 'PLAYING' || jumpsLeft <= 0) return;
+  isDragging = true;
+  dragStartTime = performance.now();
+  holdProgress = 0;
+  
+  const pos = getPointerPos(e);
+  dragStart = pos;
+  dragCurrent = pos;
+  
+  document.getElementById('slow-badge').classList.add('active');
+  if (e.cancelable) e.preventDefault();
+}
+
+function drag(e) {
+  if (!isDragging) return;
+  if (e.cancelable) e.preventDefault();
+  dragCurrent = getPointerPos(e);
+}
+
+function endDrag() {
+  if (!isDragging) return;
+  isDragging = false;
+  document.getElementById('slow-badge').classList.remove('active');
+
+  const rawDx = dragStart.x - dragCurrent.x;
+  const rawDy = dragStart.y - dragCurrent.y;
+  const rawDist = Math.hypot(rawDx, rawDy);
+
+  if (rawDist > 8) {
+    const clampedDist = Math.min(rawDist, MAX_DRAG_DIST);
+    const angle = Math.atan2(rawDy, rawDx);
+
+    const launchPower = upgrades['dashBooster'] ? 0.30 : 0.22;
+    player.vx = Math.cos(angle) * clampedDist * launchPower;
+    player.vy = Math.sin(angle) * clampedDist * launchPower;
+
+    player.dashImmunityTimer = 0.4;
+    player.dashDirX = Math.cos(angle);
+    player.dashDirY = Math.sin(angle);
+
+    jumpsLeft--;
+    document.getElementById('jumps').innerText = jumpsLeft;
+    triggerShake(4);
+  }
+}
+
+canvas.addEventListener('mousedown', startDrag);
+canvas.addEventListener('touchstart', startDrag, { passive: false });
+window.addEventListener('mousemove', drag);
+window.addEventListener('touchmove', drag, { passive: false });
+window.addEventListener('mouseup', endDrag);
+window.addEventListener('touchend', endDrag);
+
+function resetGame() {
+  player.x = 0;
+  player.y = -60;
+  player.vx = 0;
+  player.vy = 0;
+  player.invulnerable = 0;
+  player.dashImmunityTimer = 0;
+  
+  maxJumps = upgrades['extraDash'] ? 3 : 2;
+  maxHoldTime = upgrades['holdExtender'] ? 5.0 : 3.0;
+  totemRevivesLeft = upgrades['reviveTotem'] ? 1 : 0;
+  
+  jumpsLeft = maxJumps;
+  score = 0;
+  runCoins = 0;
+  isDragging = false;
+  screenShake = 0;
+  activeBoss = null;
+  autoShootTimer = 0;
+  
+  enemies = [];
+  enemyProjectiles = [];
+  playerProjectiles = [];
+  particles = [];
+  coinsWorld = [];
+  materialsWorld = [];
+  floatingTexts = [];
+  playerTrail = [];
+  loadedChunks.clear();
+
+  document.getElementById('score').innerText = score;
+  document.getElementById('hud-coins').innerText = runCoins;
+  document.getElementById('jumps').innerText = jumpsLeft;
+  document.getElementById('max-jumps-hud').innerText = maxJumps;
+  document.getElementById('slow-badge').classList.remove('active');
+  document.getElementById('boss-hud').style.display = 'none';
+  document.getElementById('game-over').style.display = 'none';
+
+  updateChunkSpawning();
+}
+
+function triggerGameOver(reason) {
+  if (totemRevivesLeft > 0) {
+    totemRevivesLeft--;
+    player.invulnerable = 60;
+    player.vy = -12;
+    triggerShake(20);
+    spawnExplosion(player.x, player.y, '#38bdf8');
+    enemyProjectiles = [];
+    return;
+  }
+
+  gameState = 'GAMEOVER';
+  isDragging = false;
+  triggerShake(20);
+  document.getElementById('slow-badge').classList.remove('active');
+  
+  totalCoins += runCoins;
+  if (score > highScore) highScore = score;
+  saveStorage();
+
+  document.getElementById('death-reason').innerText = reason;
+  document.getElementById('final-coins').innerText = runCoins;
+  document.getElementById('game-over').style.display = 'block';
+}
+
+function updateBosses() {
+  activeBoss = null;
+
+  bossArenas.forEach(boss => {
+    if (boss.defeated) return;
+
+    const dist = Math.hypot(player.x - boss.x, player.y - boss.y);
+    if (dist < 1200) {
+      activeBoss = boss;
+
+      const bossHud = document.getElementById('boss-hud');
+      bossHud.style.display = 'block';
+      document.getElementById('boss-name').innerText = boss.name;
+      document.getElementById('boss-hp-fill').style.width = `${(boss.hp / boss.maxHp) * 100}%`;
+
+      boss.attackTimer = (boss.attackTimer || 0) + 1 * timeScale;
+
+      if (boss.type === 'blaster' && boss.attackTimer > 90) {
+        boss.attackTimer = 0;
+        const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+        for (let a = -0.4; a <= 0.4; a += 0.2) {
+          enemyProjectiles.push({
+            x: boss.x, y: boss.y,
+            vx: Math.cos(angle + a) * 6,
+            vy: Math.sin(angle + a) * 6,
+            radius: 7, color: boss.color
+          });
+        }
+      } 
+      else if (boss.type === 'summoner' && boss.attackTimer > 150) {
+        boss.attackTimer = 0;
+        for (let i = 0; i < 2; i++) {
+          enemies.push({
+            x: boss.x + (Math.random() - 0.5) * 100,
+            y: boss.y + (Math.random() - 0.5) * 100,
+            vx: 0, vy: 0, radius: 18, type: 'chaser', pulse: 0
+          });
+        }
+      }
+      else if (boss.type === 'sentinel' && boss.attackTimer > 40) {
+        boss.attackTimer = 0;
+        const angle = (Date.now() / 300);
+        enemyProjectiles.push({
+          x: boss.x, y: boss.y,
+          vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7,
+          radius: 8, color: boss.color
+        });
+      }
+      else if (boss.type === 'vortex') {
+        if (dist < 900) {
+          player.vx += (boss.x - player.x) * 0.0008 * timeScale;
+          player.vy += (boss.y - player.y) * 0.0008 * timeScale;
+        }
+        if (boss.attackTimer > 110) {
+          boss.attackTimer = 0;
+          for (let i = 0; i < 8; i++) {
+            const a = (Math.PI * 2 / 8) * i;
+            enemyProjectiles.push({
+              x: boss.x, y: boss.y,
+              vx: Math.cos(a) * 5, vy: Math.sin(a) * 5,
+              radius: 8, color: boss.color
+            });
+          }
+        }
+      }
+
+      if (dist < player.radius + 45) {
+        const pSpeed = Math.hypot(player.vx, player.vy);
+        if (pSpeed >= MIN_DASH_SPEED) {
+          if (player.invulnerable <= 0) {
+            boss.hp--;
+            player.invulnerable = 20;
+            player.vy = -9;
+            jumpsLeft = maxJumps;
+            triggerShake(12);
+            spawnExplosion(player.x, player.y, boss.color);
+
+            if (boss.hp <= 0) {
+              boss.defeated = true;
+              score += 50;
+              runCoins += 50;
+              spawnCoins(boss.x, boss.y, 25);
+              spawnMaterial(boss.x, boss.y, boss.ingredient);
+              spawnExplosion(boss.x, boss.y, boss.color);
+              document.getElementById('boss-hud').style.display = 'none';
+            }
+          }
+        } else if (player.invulnerable <= 0) {
+          triggerGameOver(`CRUSHED BY ${boss.name}!`);
+        }
+      }
+    }
+  });
+
+  if (!activeBoss) {
+    document.getElementById('boss-hud').style.display = 'none';
+  }
+}
+
+function updatePhysics() {
+  if (gameState !== 'PLAYING') return;
+
+  broadcastPlayerData();
+  updateChunkSpawning();
+  timeScale = isDragging ? 0.18 : 1.0;
+
+  if (player.invulnerable > 0) player.invulnerable -= 1 * timeScale;
+
+  if (player.dashImmunityTimer > 0) {
+    player.dashImmunityTimer -= (1 / 60) * timeScale;
+  }
+
+  if (isDragging) {
+    const elapsed = (performance.now() - dragStartTime) / 1000;
+    holdProgress = Math.min(elapsed / maxHoldTime, 1.0);
+    if (elapsed >= maxHoldTime) endDrag();
+  }
+
+  if (upgrades['autoShooter']) {
+    autoShootTimer += (1 / 60) * timeScale;
+    if (autoShootTimer >= 3.0) {
+      autoShootTimer = 0;
+      let target = null;
+      let minDist = 800;
+
+      enemies.forEach(e => {
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if (d < minDist) { minDist = d; target = e; }
+      });
+
+      if (!target) {
+        bossArenas.forEach(b => {
+          if (!b.defeated) {
+            const d = Math.hypot(b.x - player.x, b.y - player.y);
+            if (d < minDist) { minDist = d; target = b; }
+          }
+        });
+      }
+
+      if (target) {
+        const angle = Math.atan2(target.y - player.y, target.x - player.x);
+        playerProjectiles.push({
+          x: player.x, y: player.y,
+          vx: Math.cos(angle) * 12,
+          vy: Math.sin(angle) * 12,
+          life: 120
+        });
+      }
+    }
+  }
+
+  for (let i = playerProjectiles.length - 1; i >= 0; i--) {
+    const p = playerProjectiles[i];
+    p.x += p.vx * timeScale;
+    p.y += p.vy * timeScale;
+    p.life -= 1 * timeScale;
+
+    if (p.life <= 0) {
+      playerProjectiles.splice(i, 1);
+      continue;
+    }
+
+    let hit = false;
+    for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
+      const e = enemies[eIdx];
+      if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 10) {
+        spawnExplosion(e.x, e.y, '#38bdf8');
+        spawnCoins(e.x, e.y, 2);
+        if (e.type === 'normal') spawnMaterial(e.x, e.y, "Iron Scrap");
+        else if (e.type === 'chaser') spawnMaterial(e.x, e.y, "Chaser Plasma");
+        else if (e.type === 'shooter') spawnMaterial(e.x, e.y, "Shooter Lens");
+        enemies.splice(eIdx, 1);
+        score++;
+        document.getElementById('score').innerText = score;
+        hit = true;
+        break;
+      }
+    }
+
+    if (!hit) {
+      for (let b of bossArenas) {
+        if (!b.defeated && Math.hypot(p.x - b.x, p.y - b.y) < 55) {
+          b.hp--;
+          spawnExplosion(p.x, p.y, '#38bdf8');
+          if (b.hp <= 0) {
+            b.defeated = true;
+            score += 50;
+            runCoins += 50;
+            spawnCoins(b.x, b.y, 25);
+            spawnMaterial(b.x, b.y, b.ingredient);
+          }
+          hit = true;
+          break;
+        }
+      }
+    }
+
+    if (hit) playerProjectiles.splice(i, 1);
+  }
+
+  player.vy += GRAVITY * timeScale;
+  player.vx *= Math.pow(FRICTION, timeScale);
+  player.vy *= Math.pow(FRICTION, timeScale);
+
+  player.x += player.vx * timeScale;
+  player.y += player.vy * timeScale;
+
+  const playerSpeed = Math.hypot(player.vx, player.vy);
+  if (playerSpeed > 1) {
+    player.dashDirX = player.vx / playerSpeed;
+    player.dashDirY = player.vy / playerSpeed;
+  }
+
+  if (playerSpeed >= MIN_DASH_SPEED) {
+    playerTrail.unshift({
+      x: player.x, y: player.y, radius: player.radius, alpha: 0.5,
+      isDashing: true,
+      trailType: activeTrail,
+      hue: (Date.now() / 5) % 360
+    });
+  }
+  playerTrail.forEach(t => t.alpha -= 0.05 * timeScale);
+  playerTrail = playerTrail.filter(t => t.alpha > 0);
+
+  if (
+    player.x + player.radius > startPlatform.x &&
+    player.x - player.radius < startPlatform.x + startPlatform.w &&
+    player.y + player.radius > startPlatform.y &&
+    player.y - player.radius < startPlatform.y + startPlatform.h &&
+    player.vy > 0
+  ) {
+    player.y = startPlatform.y - player.radius;
+    player.vy = 0;
+    player.vx *= 0.8;
+    jumpsLeft = maxJumps;
+    document.getElementById('jumps').innerText = jumpsLeft;
+  }
+
+  for (let idx = coinsWorld.length - 1; idx >= 0; idx--) {
+    const coin = coinsWorld[idx];
+    coin.vx = (coin.vx || 0) * 0.92;
+    coin.vy = (coin.vy || 0) * 0.92;
+
+    const dx = player.x - coin.x;
+    const dy = player.y - coin.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist < 450) {
+      const pullSpeed = Math.max(14, (450 - dist) * 0.08);
+      coin.vx += (dx / dist) * pullSpeed;
+      coin.vy += (dy / dist) * pullSpeed;
+    }
+
+    coin.x += coin.vx * timeScale;
+    coin.y += coin.vy * timeScale;
+
+    if (dist < player.radius + 18) {
+      runCoins++;
+      document.getElementById('hud-coins').innerText = runCoins;
+
+      for (let p = 0; p < 5; p++) {
+        particles.push({
+          x: coin.x, y: coin.y,
+          vx: (Math.random() - 0.5) * 8,
+          vy: (Math.random() - 0.5) * 8,
+          size: Math.random() * 4 + 2,
+          color: Math.random() > 0.4 ? '#facc15' : '#ffffff',
+          life: 0.6
+        });
+      }
+
+      floatingTexts.push({
+        text: '+1',
+        x: coin.x, y: coin.y,
+        vy: -1.5,
+        alpha: 1.0,
+        color: '#facc15'
+      });
+
+      coinsWorld.splice(idx, 1);
+    }
+  }
+
+  materialsWorld.forEach((mat, idx) => {
+    mat.x += (mat.vx || 0) * timeScale;
+    mat.y += (mat.vy || 0) * timeScale;
+
+    const dist = Math.hypot(player.x - mat.x, player.y - mat.y);
+    if (dist < 300) {
+      mat.x += (player.x - mat.x) * 0.18 * timeScale;
+      mat.y += (player.y - mat.y) * 0.18 * timeScale;
+    }
+    if (dist < player.radius + 14) {
+      addMaterial(mat.name);
+      spawnExplosion(mat.x, mat.y, mat.color);
+      floatingTexts.push({
+        text: `+${mat.name}`,
+        x: mat.x, y: mat.y,
+        vy: -1.5,
+        alpha: 1.0,
+        color: mat.color
+      });
+      materialsWorld.splice(idx, 1);
+    }
+  });
+
+  for (let idx = enemyProjectiles.length - 1; idx >= 0; idx--) {
+    const proj = enemyProjectiles[idx];
+    proj.x += proj.vx * timeScale;
+    proj.y += proj.vy * timeScale;
+
+    const dist = Math.hypot(player.x - proj.x, player.y - proj.y);
+    if (dist < player.radius + proj.radius) {
+      let blocked = false;
+
+      if (player.dashImmunityTimer > 0) {
+        const dx = proj.x - player.x;
+        const dy = proj.y - player.y;
+        const projDist = Math.hypot(dx, dy) || 1;
+        const dirX = dx / projDist;
+        const dirY = dy / projDist;
+
+        const dot = dirX * player.dashDirX + dirY * player.dashDirY;
+        if (dot > -0.2) blocked = true;
+      }
+
+      if (blocked) {
+        spawnExplosion(proj.x, proj.y, '#38bdf8');
+        enemyProjectiles.splice(idx, 1);
+      } else if (player.invulnerable <= 0) {
+        spawnExplosion(player.x, player.y);
+        triggerGameOver("SHOT DOWN BY ENEMY!");
+        break;
+      }
+    }
+  }
+  enemyProjectiles = enemyProjectiles.filter(p => Math.hypot(p.x - player.x, p.y - player.y) < 2000);
+
+  enemies.forEach((enemy, idx) => {
+    const dx = player.x - enemy.x;
+    const dy = player.y - enemy.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (enemy.type === 'chaser' && dist < 1100) {
+      const chaseSpeed = 3.4;
+      enemy.vx = (dx / dist) * chaseSpeed;
+      enemy.vy = (dy / dist) * chaseSpeed;
+      enemy.x += enemy.vx * timeScale;
+      enemy.y += enemy.vy * timeScale;
+    }
+
+    if (enemy.type === 'shooter' && dist < 900) {
+      enemy.shootCooldown -= 1 * timeScale;
+      if (enemy.shootCooldown <= 0) {
+        enemy.shootCooldown = 110;
+        enemyProjectiles.push({
+          x: enemy.x, y: enemy.y,
+          vx: (dx / dist) * 5.5,
+          vy: (dy / dist) * 5.5,
+          radius: 6, color: '#facc15'
+        });
+      }
+    }
+
+    if (dist < player.radius + enemy.radius) {
+      if (playerSpeed >= MIN_DASH_SPEED) {
+        spawnExplosion(enemy.x, enemy.y, enemy.type === 'chaser' ? '#f43f5e' : (enemy.type === 'shooter' ? '#facc15' : null));
+        spawnCoins(enemy.x, enemy.y, enemy.type === 'normal' ? 3 : 6);
+
+        if (enemy.type === 'normal') spawnMaterial(enemy.x, enemy.y, "Iron Scrap");
+        else if (enemy.type === 'chaser') spawnMaterial(enemy.x, enemy.y, "Chaser Plasma");
+        else if (enemy.type === 'shooter') spawnMaterial(enemy.x, enemy.y, "Shooter Lens");
+
+        enemies.splice(idx, 1);
+        score++;
+        document.getElementById('score').innerText = score;
+
+        jumpsLeft = maxJumps;
+        document.getElementById('jumps').innerText = jumpsLeft;
+
+        player.vy = -7;
+        triggerShake(8);
+      } else if (player.invulnerable <= 0) {
+        spawnExplosion(player.x, player.y);
+        triggerGameOver("KILLED BY ENEMY! (DASH TO ATTACK)");
+      }
+    }
+  });
+
+  updateBosses();
+
+  if (player.y + player.radius >= LAVA_Y) {
+    spawnExplosion(player.x, player.y, '#ef4444');
+    triggerGameOver("YOU FELL IN LAVA!");
+  }
+
+  if (screenShake > 0) screenShake *= 0.88;
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+
+  let shakeX = (Math.random() - 0.5) * screenShake;
+  let shakeY = (Math.random() - 0.5) * screenShake;
+
+  const cameraOffsetY = canvas.height * 0.12;
+  ctx.translate(canvas.width / 2 + shakeX, (canvas.height / 2 - cameraOffsetY) + shakeY);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(-player.x, -player.y);
+
+  stars.forEach(star => {
+    ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
+    ctx.fillRect(star.x, star.y, star.size / ZOOM, star.size / ZOOM);
+  });
+
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(-25000, LAVA_Y, 50000, 2000);
+  ctx.fillStyle = '#f97316';
+  ctx.fillRect(-25000, LAVA_Y - 10, 50000, 20);
+
+  ctx.fillStyle = '#0284c7';
+  ctx.fillRect(startPlatform.x, startPlatform.y, startPlatform.w, startPlatform.h);
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(startPlatform.x, startPlatform.y, startPlatform.w, startPlatform.h);
+
+  bossArenas.forEach(boss => {
+    if (boss.defeated) return;
+
+    ctx.strokeStyle = boss.color;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(boss.x - 180, boss.y + 60, 360, 20);
+
+    ctx.beginPath();
+    ctx.arc(boss.x, boss.y, 45, 0, Math.PI * 2);
+    ctx.fillStyle = boss.color;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(boss.x, boss.y, 20, 0, Math.PI * 2);
+    ctx.fillStyle = '#0f172a';
+    ctx.fill();
+  });
+
+  playerTrail.forEach(t => {
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, t.radius * (t.alpha * 0.6), 0, Math.PI * 2);
+
+    const trailMeta = TRAILS_CATALOG[t.trailType] || TRAILS_CATALOG['standard'];
+    if (trailMeta.color === 'rainbow') {
+      ctx.fillStyle = `hsla(${t.hue}, 100%, 60%, ${t.alpha})`;
+    } else {
+      ctx.fillStyle = trailMeta.color;
+      ctx.globalAlpha = t.alpha;
+    }
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+  });
+
+  coinsWorld.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = '#facc15';
+    ctx.fill();
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  materialsWorld.forEach(m => {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.fillStyle = m.color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+
+    if (m.shape === 'star') {
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        ctx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * 12, -Math.sin((18 + i * 72) * Math.PI / 180) * 12);
+        ctx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * 6, -Math.sin((54 + i * 72) * Math.PI / 180) * 6);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (m.shape === 'cog') {
+      ctx.fillRect(-8, -8, 16, 16);
+      ctx.strokeRect(-8, -8, 16, 16);
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+
+  playerProjectiles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  enemyProjectiles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+  });
+
+  enemies.forEach(enemy => {
+    enemy.pulse += 0.05 * timeScale;
+    const pulseSize = enemy.radius + Math.sin(enemy.pulse) * 3;
+
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, pulseSize, 0, Math.PI * 2);
+
+    if (enemy.type === 'chaser') {
+      ctx.fillStyle = '#f43f5e';
+      ctx.fill();
+      ctx.strokeStyle = '#fda4af';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else if (enemy.type === 'shooter') {
+      ctx.fillStyle = '#eab308';
+      ctx.fill();
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#a855f7';
+      ctx.fill();
+      ctx.strokeStyle = '#e9d5ff';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+  });
+
+  particles.forEach((p, idx) => {
+    p.x += p.vx * timeScale;
+    p.y += p.vy * timeScale;
+    p.life -= 0.03 * timeScale;
+    if (p.life <= 0) particles.splice(idx, 1);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+    ctx.globalAlpha = 1.0;
+  });
+
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.y += ft.vy * timeScale;
+    ft.alpha -= 0.025 * timeScale;
+    if (ft.alpha <= 0) {
+      floatingTexts.splice(i, 1);
+      continue;
+    }
+    ctx.save();
+    ctx.font = '900 20px system-ui, sans-serif';
+    ctx.fillStyle = ft.color;
+    ctx.globalAlpha = Math.max(0, ft.alpha);
+    ctx.textAlign = 'center';
+    ctx.fillText(ft.text, ft.x, ft.y);
+    ctx.restore();
+  }
+
+  // Render Remote Players
+  Object.values(remotePlayers).forEach(p => {
+    if (peer && p.id === peer.id) return;
+    const skinMeta = SKINS_CATALOG[p.skin] || SKINS_CATALOG['cyan'];
+    
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+    ctx.fillStyle = skinMeta.color;
+    ctx.fill();
+    ctx.strokeStyle = p.isDashing ? '#facc15' : skinMeta.stroke;
+    ctx.lineWidth = p.isDashing ? 5 : 3;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.font = '900 14px system-ui, sans-serif';
+    ctx.fillStyle = '#38bdf8';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name || "Player 2", p.x, p.y - 28);
+    ctx.restore();
+  });
+
+  if (isDragging && jumpsLeft > 0) {
+    const rawDx = (dragStart.x - dragCurrent.x);
+    const rawDy = (dragStart.y - dragCurrent.y);
+    const rawDist = Math.hypot(rawDx, rawDy);
+    
+    if (rawDist > 8) {
+      const clampedDist = Math.min(rawDist, MAX_DRAG_DIST);
+      const angle = Math.atan2(rawDy, rawDx);
+
+      const dx = (Math.cos(angle) * clampedDist) / ZOOM;
+      const dy = (Math.sin(angle) * clampedDist) / ZOOM;
+
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(player.x, player.y);
+      ctx.lineTo(player.x + dx, player.y + dy);
+      ctx.stroke();
+    }
+  }
+
+  // Render Local Player
+  const currentSpeed = Math.hypot(player.vx, player.vy);
+  const isDashing = currentSpeed >= MIN_DASH_SPEED;
+  const skinMeta = SKINS_CATALOG[activeSkin] || SKINS_CATALOG['cyan'];
+
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+  ctx.fillStyle = jumpsLeft <= 0 ? '#64748b' : skinMeta.color;
+  ctx.fill();
+  ctx.strokeStyle = isDashing ? '#facc15' : skinMeta.stroke;
+  ctx.lineWidth = isDashing ? 5 : 3;
+  ctx.stroke();
+
+  ctx.save();
+  ctx.font = '900 14px system-ui, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(playerNickname, player.x, player.y - 28);
+  ctx.restore();
+
+  if (player.dashImmunityTimer > 0) {
+    const moveAngle = Math.atan2(player.dashDirY, player.dashDirX);
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius + 12, moveAngle - Math.PI / 2.5, moveAngle + Math.PI / 2.5);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  bossArenas.forEach(boss => {
+    if (boss.defeated) return;
+    const dx = boss.x - player.x;
+    const dy = boss.y - player.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist > 800) {
+      const angle = Math.atan2(dy, dx);
+      const arrowX = player.x + Math.cos(angle) * 140;
+      const arrowY = player.y + Math.sin(angle) * 140;
+
+      ctx.save();
+      ctx.translate(arrowX, arrowY);
+      ctx.rotate(angle);
+      ctx.fillStyle = boss.color;
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-8, -8);
+      ctx.lineTo(-8, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  });
+
+  if (isDragging) {
+    const ringRadius = player.radius + 15;
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + (Math.PI * 2 * holdProgress);
+
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, ringRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, ringRadius, startAngle, endAngle);
+    ctx.strokeStyle = holdProgress > 0.75 ? '#ef4444' : '#f43f5e';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function gameLoop() {
+  updatePhysics();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+updateLobbyUI();
+gameLoop();
+</script>
+</body>
+</html>
