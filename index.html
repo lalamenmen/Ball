@@ -222,6 +222,18 @@
       margin-top: 4px;
     }
 
+    /* Account Badge Display */
+    .account-badge-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid #0284c7;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin-bottom: 8px;
+    }
+
     /* Inventory Grid */
     .inventory-grid {
       display: grid;
@@ -438,20 +450,47 @@
       <div class="stat-item"><div class="stat-label">BOSSES DEFEATED</div><div id="lobby-bosses" class="stat-val" style="color:#f43f5e;">0/4</div></div>
     </div>
 
-    <!-- Multiplayer & Profile Panel -->
+    <!-- User Account & Save System Panel -->
+    <div class="panel-box">
+      <div class="panel-title">🔑 USER ACCOUNT & DATA SAVE</div>
+      
+      <!-- Logged-in View -->
+      <div id="logged-in-view" style="display: none;">
+        <div class="account-badge-box">
+          <div style="font-size: 11px; font-weight: bold; color: #38bdf8;">
+            ACCOUNT: <span id="account-username-display" style="color: #facc15;">Guest</span>
+          </div>
+          <button class="btn-sub" style="background: #dc2626; padding: 4px 10px;" onclick="logoutAccount()">LOGOUT</button>
+        </div>
+      </div>
+
+      <!-- Login / Register View -->
+      <div id="account-auth-view">
+        <div class="mp-row" style="margin-bottom: 4px;">
+          <input type="text" id="acc-nickname-input" class="input-field" placeholder="Enter Nickname..." maxlength="12" style="margin-bottom:0;" />
+          <input type="password" id="acc-password-input" class="input-field" placeholder="Enter Password..." maxlength="20" style="margin-bottom:0;" />
+        </div>
+        <div class="mp-row">
+          <button class="btn-sub" style="width: 50%;" onclick="handleLogin()">LOGIN</button>
+          <button class="btn-sub" style="width: 50%; background: #059669;" onclick="handleRegister()">CREATE ACCOUNT</button>
+        </div>
+      </div>
+      <div id="acc-status" class="status-text">Status: Playing as Guest (Local Auto-Save Active)</div>
+    </div>
+
+    <!-- Multiplayer Panel -->
     <div class="panel-box">
       <div class="panel-title">🌐 MULTIPLAYER LOBBY</div>
-      <input type="text" id="nickname-input" class="input-field" placeholder="Enter Your Nickname..." maxlength="12" onchange="saveNickname()" />
       
       <!-- Host with Custom Room Name Option -->
       <div class="mp-row">
-        <input type="text" id="host-room-input" class="input-field" placeholder="Create Room Name (e.g. a)" style="margin-bottom:0;" />
+        <input type="text" id="host-room-input" class="input-field" placeholder="Create Room Name (e.g. room1)" style="margin-bottom:0;" />
         <button class="btn-sub" onclick="hostMultiplayerRoom()">HOST GAME</button>
       </div>
 
       <!-- Join Room Input -->
       <div class="mp-row">
-        <input type="text" id="join-room-input" class="input-field" placeholder="Enter Room Name To Join (e.g. a)..." style="margin-bottom:0;" />
+        <input type="text" id="join-room-input" class="input-field" placeholder="Enter Room Name To Join..." style="margin-bottom:0;" />
         <button class="btn-sub" onclick="joinMultiplayerRoom()">JOIN</button>
         <button class="btn-sub" style="background: #059669;" onclick="copyRoomID()">COPY NAME</button>
       </div>
@@ -528,7 +567,7 @@ const CHUNK_SIZE = 900;
 const MIN_DASH_SPEED = 9.5;
 const MAX_DRAG_DIST = 140;
 
-// Room Prefix to avoid global peer server namespace collisions with short names like 'a'
+// Room Prefix to avoid global peer server namespace collisions
 const ROOM_PREFIX = "airdash_room_v1_";
 
 // Material Visual Definitions
@@ -561,36 +600,186 @@ const TRAILS_CATALOG = {
   "cyber": { name: "Cyber Matrix", color: "#34d399" }
 };
 
-// Persistent User Data
-let totalCoins = parseInt(localStorage.getItem('ad_coins') || '0');
-let highScore = parseInt(localStorage.getItem('ad_high') || '0');
-let materials = JSON.parse(localStorage.getItem('ad_materials') || '{}');
-let upgrades = JSON.parse(localStorage.getItem('ad_upgrades') || '{}');
-let unlockedSkins = JSON.parse(localStorage.getItem('ad_unlocked_skins') || '["cyan"]');
-let unlockedTrails = JSON.parse(localStorage.getItem('ad_unlocked_trails') || '["standard"]');
-let activeSkin = localStorage.getItem('ad_active_skin') || 'cyan';
-let activeTrail = localStorage.getItem('ad_active_trail') || 'standard';
-let playerNickname = localStorage.getItem('ad_nickname') || `Player_${Math.floor(Math.random() * 8999 + 1000)}`;
+// ================= ACCOUNT & SAVING SYSTEM =================
+let accounts = JSON.parse(localStorage.getItem('ad_accounts_db') || '{}');
+let activeAccountName = localStorage.getItem('ad_active_account') || null;
 
-document.getElementById('nickname-input').value = playerNickname;
+// Game State Variables for current logged in user
+let totalCoins = 0;
+let highScore = 0;
+let materials = {};
+let upgrades = {};
+let unlockedSkins = ["cyan"];
+let unlockedTrails = ["standard"];
+let activeSkin = "cyan";
+let activeTrail = "standard";
+let playerNickname = `Player_${Math.floor(Math.random() * 8999 + 1000)}`;
 
-function saveStorage() {
-  localStorage.setItem('ad_coins', totalCoins.toString());
-  localStorage.setItem('ad_materials', JSON.stringify(materials));
-  localStorage.setItem('ad_upgrades', JSON.stringify(upgrades));
-  localStorage.setItem('ad_unlocked_skins', JSON.stringify(unlockedSkins));
-  localStorage.setItem('ad_unlocked_trails', JSON.stringify(unlockedTrails));
-  localStorage.setItem('ad_active_skin', activeSkin);
-  localStorage.setItem('ad_active_trail', activeTrail);
-  localStorage.setItem('ad_nickname', playerNickname);
+function createDefaultData(nickname) {
+  return {
+    nickname: nickname,
+    coins: 0,
+    highScore: 0,
+    materials: {},
+    upgrades: {},
+    unlockedSkins: ["cyan"],
+    unlockedTrails: ["standard"],
+    activeSkin: "cyan",
+    activeTrail: "standard"
+  };
 }
 
-function saveNickname() {
-  const val = document.getElementById('nickname-input').value.trim();
-  if (val.length > 0) {
-    playerNickname = val;
-    saveStorage();
+function loadAccount(username) {
+  if (!accounts[username]) return false;
+  
+  const acc = accounts[username];
+  activeAccountName = username;
+  localStorage.setItem('ad_active_account', username);
+
+  playerNickname = acc.data.nickname || username;
+  totalCoins = acc.data.coins || 0;
+  highScore = acc.data.highScore || 0;
+  materials = acc.data.materials || {};
+  upgrades = acc.data.upgrades || {};
+  unlockedSkins = acc.data.unlockedSkins || ["cyan"];
+  unlockedTrails = acc.data.unlockedTrails || ["standard"];
+  activeSkin = acc.data.activeSkin || "cyan";
+  activeTrail = acc.data.activeTrail || "standard";
+
+  updateAccountUI(`Logged in as "${username}"`);
+  updateLobbyUI();
+  return true;
+}
+
+function saveStorage() {
+  if (activeAccountName && accounts[activeAccountName]) {
+    accounts[activeAccountName].data = {
+      nickname: playerNickname,
+      coins: totalCoins,
+      highScore: highScore,
+      materials: materials,
+      upgrades: upgrades,
+      unlockedSkins: unlockedSkins,
+      unlockedTrails: unlockedTrails,
+      activeSkin: activeSkin,
+      activeTrail: activeTrail
+    };
+    localStorage.setItem('ad_accounts_db', JSON.stringify(accounts));
+  } else {
+    // Guest auto-save fallback
+    localStorage.setItem('ad_guest_save', JSON.stringify({
+      nickname: playerNickname,
+      coins: totalCoins,
+      highScore: highScore,
+      materials: materials,
+      upgrades: upgrades,
+      unlockedSkins: unlockedSkins,
+      unlockedTrails: unlockedTrails,
+      activeSkin: activeSkin,
+      activeTrail: activeTrail
+    }));
   }
+}
+
+function loadGuestData() {
+  const guestSave = JSON.parse(localStorage.getItem('ad_guest_save') || 'null');
+  if (guestSave) {
+    playerNickname = guestSave.nickname || playerNickname;
+    totalCoins = guestSave.coins || 0;
+    highScore = guestSave.highScore || 0;
+    materials = guestSave.materials || {};
+    upgrades = guestSave.upgrades || {};
+    unlockedSkins = guestSave.unlockedSkins || ["cyan"];
+    unlockedTrails = guestSave.unlockedTrails || ["standard"];
+    activeSkin = guestSave.activeSkin || "cyan";
+    activeTrail = guestSave.activeTrail || "standard";
+  }
+}
+
+function handleRegister() {
+  const nick = document.getElementById('acc-nickname-input').value.trim();
+  const pass = document.getElementById('acc-password-input').value.trim();
+
+  if (!nick || !pass) {
+    updateAccountUI("Please fill in both Nickname and Password!");
+    return;
+  }
+
+  if (accounts[nick]) {
+    updateAccountUI("Account already exists! Please click Login.");
+    return;
+  }
+
+  // Create new user entry
+  accounts[nick] = {
+    password: pass,
+    data: createDefaultData(nick)
+  };
+
+  localStorage.setItem('ad_accounts_db', JSON.stringify(accounts));
+  loadAccount(nick);
+  updateAccountUI(`Account "${nick}" created & logged in!`);
+
+  document.getElementById('acc-nickname-input').value = '';
+  document.getElementById('acc-password-input').value = '';
+}
+
+function handleLogin() {
+  const nick = document.getElementById('acc-nickname-input').value.trim();
+  const pass = document.getElementById('acc-password-input').value.trim();
+
+  if (!nick || !pass) {
+    updateAccountUI("Please enter Nickname and Password!");
+    return;
+  }
+
+  if (!accounts[nick]) {
+    updateAccountUI("Account does not exist! Register a new account first.");
+    return;
+  }
+
+  if (accounts[nick].password !== pass) {
+    updateAccountUI("Incorrect Password!");
+    return;
+  }
+
+  loadAccount(nick);
+  document.getElementById('acc-nickname-input').value = '';
+  document.getElementById('acc-password-input').value = '';
+}
+
+function logoutAccount() {
+  activeAccountName = null;
+  localStorage.removeItem('ad_active_account');
+  loadGuestData();
+  updateAccountUI("Logged out. Playing as Guest.");
+  updateLobbyUI();
+}
+
+function updateAccountUI(msg = "") {
+  const authView = document.getElementById('account-auth-view');
+  const loggedInView = document.getElementById('logged-in-view');
+  const userDisp = document.getElementById('account-username-display');
+  const statusTxt = document.getElementById('acc-status');
+
+  if (activeAccountName) {
+    authView.style.display = 'none';
+    loggedInView.style.display = 'block';
+    userDisp.innerText = activeAccountName;
+    statusTxt.innerText = msg || `Logged in as ${activeAccountName} (Cloud Auto-Saved locally)`;
+  } else {
+    authView.style.display = 'block';
+    loggedInView.style.display = 'none';
+    statusTxt.innerText = msg || "Playing as Guest (Create or login to save data)";
+  }
+}
+
+// Initial account load on page load
+if (activeAccountName && accounts[activeAccountName]) {
+  loadAccount(activeAccountName);
+} else {
+  loadGuestData();
+  updateAccountUI();
 }
 
 // Shop Catalog Definitions
@@ -682,10 +871,7 @@ function updateMPStatus(msg) {
   document.getElementById('mp-status').innerText = `Status: ${msg}`;
 }
 
-// Fixed Room ID Host implementation with application namespacing
 function hostMultiplayerRoom() {
-  saveNickname();
-  
   if (peer) peer.destroy();
 
   const customRoomInput = document.getElementById('host-room-input').value.trim();
@@ -711,7 +897,7 @@ function hostMultiplayerRoom() {
 
   peer.on('error', (err) => {
     if (err.type === 'unavailable-id') {
-      updateMPStatus(`Room "${roomName}" is currently active or taken! Try joining or pick another name.`);
+      updateMPStatus(`Room "${roomName}" is currently active! Pick another name.`);
     } else {
       updateMPStatus(`Host Error: ${err.type}`);
     }
@@ -719,7 +905,6 @@ function hostMultiplayerRoom() {
 }
 
 function joinMultiplayerRoom() {
-  saveNickname();
   const roomName = document.getElementById('join-room-input').value.trim();
   if (!roomName) {
     alert("Please enter a room name to join!");
@@ -985,7 +1170,6 @@ function updateLobbyUI() {
 }
 
 function startGame() {
-  saveNickname();
   gameState = 'PLAYING';
   document.getElementById('lobby-screen').style.display = 'none';
   resetGame();
@@ -1793,7 +1977,7 @@ function render() {
     ctx.textAlign = 'center';
     ctx.fillText(ft.text, ft.x, ft.y);
     ctx.restore();
-  }
+  });
 
   // Render Remote Players
   Object.values(remotePlayers).forEach(p => {
